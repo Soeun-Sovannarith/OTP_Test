@@ -8,12 +8,27 @@ import org.springframework.stereotype.Service;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import java.util.Random;
+import java.time.LocalDateTime;
+import com.rith.testotp.Model.UserOtp;
+import com.rith.testotp.Repository.OtpMapper;
 
 @Service
 public class MailService {
 
     @Autowired
     private JavaMailSender mailSender;
+
+    @Autowired
+    private OtpMapper otpMapper;
+
+    public void verifyOtp(String email, String otpCode) {
+        UserOtp userOtp = otpMapper.findLatestValidOtp(email, otpCode);
+        if (userOtp != null && userOtp.getExpiresAt().isAfter(LocalDateTime.now())) {
+            otpMapper.markAsVerified(userOtp.getId());
+        } else {
+            throw new RuntimeException("Invalid or Expired OTP");
+        }
+    }
 
     public String sendOtp(String to) {
 
@@ -36,6 +51,15 @@ public class MailService {
             helper.setText(htmlContent, true);
 
             mailSender.send(message);
+
+            UserOtp otpRecord = new UserOtp();
+            otpRecord.setEmail(to);
+            otpRecord.setOtpCode(otp);
+            otpRecord.setCreatedAt(LocalDateTime.now());
+            otpRecord.setExpiresAt(LocalDateTime.now().plusMinutes(10)); // Valid for 10 minutes
+            otpRecord.setVerified(false);
+            otpMapper.insertOtp(otpRecord);
+
         } catch (MessagingException e) {
             e.printStackTrace();
             return null;
